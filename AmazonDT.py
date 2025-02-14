@@ -96,7 +96,7 @@ for model_name, model in models.items():
         mlflow.log_metric("MAE", mae)
         mlflow.log_metric("RMSE", rmse)
         mlflow.log_metric("R2", r2)
-        mlflow.sklearn.log_model(model, model_name, requirements_file="requirements.txt", input_example=X_test[:1])
+        mlflow.sklearn.log_model(model, model_name, input_example=X_test[:1])
 
         # Select best model
         if r2 > best_r2:
