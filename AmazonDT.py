@@ -96,7 +96,7 @@ for model_name, model in models.items():
         mlflow.log_metric("MAE", mae)
         mlflow.log_metric("RMSE", rmse)
         mlflow.log_metric("R2", r2)
-        mlflow.sklearn.log_model(model, model_name, input_example=X_test[:1])
+        mlflow.sklearn.log_model(model, model_name, requirements_file="requirements.txt", input_example=X_test[:1])
 
         # Select best model
         if r2 > best_r2:
@@ -125,20 +125,50 @@ def predict_delivery_time(features):
     # Predict delivery time
     return best_model.predict(features_scaled)[0]
 
+# Increase the width of the sidebar
 st.set_page_config(layout="wide")
 
 # Add Amazon Logo to Sidebar
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", use_column_width=True)
+st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", use_container_width=True)
 st.sidebar.markdown("<h2 style='text-align: center;'>User Input Features</h2>", unsafe_allow_html=True)
+
+# User inputs
+agent_age = st.sidebar.number_input("Agent Age", min_value=18, max_value=70, value=30)
+agent_rating = st.sidebar.slider("Agent Rating", 1.0, 5.0, 4.5)
+order_year = st.sidebar.selectbox("Order Year", sorted(df["Order_Year"].unique()))
+order_month = st.sidebar.selectbox("Order Month", sorted(df["Order_Month"].unique()))
+order_day = st.sidebar.selectbox("Order Day", sorted(df["Order_Day"].unique()))
+order_hour = st.sidebar.slider("Order Time (Hour)", 0, 23, 12)
+pickup_hour = st.sidebar.slider("Pickup Time (Hour)", 0, 23, 14)
+distance = st.sidebar.number_input("Distance (KM)", min_value=0.1, max_value=50.0, value=5.0)
+
+weather = st.sidebar.selectbox("Weather", label_encoders["Weather"].classes_)
+traffic = st.sidebar.selectbox("Traffic", label_encoders["Traffic"].classes_)
+vehicle = st.sidebar.selectbox("Vehicle", label_encoders["Vehicle"].classes_)
+area = st.sidebar.selectbox("Area", label_encoders["Area"].classes_)
+category = st.sidebar.selectbox("Category", label_encoders["Category"].classes_)
+
+# Encode user inputs
+encoded_weather = label_encoders["Weather"].transform([weather])[0]
+encoded_traffic = label_encoders["Traffic"].transform([traffic])[0]
+encoded_vehicle = label_encoders["Vehicle"].transform([vehicle])[0]
+encoded_area = label_encoders["Area"].transform([area])[0]
+encoded_category = label_encoders["Category"].transform([category])[0]
+
+# Prepare input features
+features = [agent_age, agent_rating, order_year, order_month, order_day, order_hour, pickup_hour, distance, 
+            encoded_weather, encoded_traffic, encoded_vehicle, encoded_area, encoded_category, 0, 0, 0, 0]
+
+# Predict
+if st.button("🚀 Predict Delivery Time"):
+    prediction = predict_delivery_time(features)
+    st.success(f"📌 Estimated Delivery Time: {round(prediction, 2)} minutes")
 
 # --- EDA Section ---
 st.header("📊 Exploratory Data Analysis")
 
 # Arrange EDA into sections
-eda_tabs = st.tabs([
-    "Missing Values", "Feature Distributions", "Outliers", "Correlation Heatmap", "Delivery Time vs Distance",
-    "Agent Age Distribution", "Order Hour Distribution", "Pickup vs Delivery Time", "Weather vs Delivery Time", "Traffic vs Delivery Time"
-])
+eda_tabs = st.tabs(["Missing Values", "Feature Distributions", "Outliers", "Correlation Heatmap", "Delivery Time vs Distance"])
 
 with eda_tabs[0]:  
     st.write("### 🔍 Missing Values")
@@ -167,34 +197,4 @@ with eda_tabs[4]:
     st.write("### 🚗 Delivery Time vs Distance")
     fig, ax = plt.subplots(figsize=(8,6))
     sns.scatterplot(x=df["Distance_KM"], y=df["Delivery_Time"], alpha=0.5, ax=ax)
-    st.pyplot(fig)
-
-with eda_tabs[5]:  
-    st.write("### 🧓 Agent Age Distribution")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.histplot(df["Agent_Age"], bins=20, kde=True, ax=ax)
-    st.pyplot(fig)
-
-with eda_tabs[6]:  
-    st.write("### ⏰ Order Hour Distribution")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.histplot(df["Order_Time"], bins=24, kde=True, ax=ax)
-    st.pyplot(fig)
-
-with eda_tabs[7]:  
-    st.write("### 🚚 Pickup vs Delivery Time")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.scatterplot(x=df["Pickup_Time"], y=df["Delivery_Time"], ax=ax)
-    st.pyplot(fig)
-
-with eda_tabs[8]:  
-    st.write("### ☁️ Weather vs Delivery Time")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.boxplot(x=df["Weather"], y=df["Delivery_Time"], ax=ax)
-    st.pyplot(fig)
-
-with eda_tabs[9]:  
-    st.write("### 🚦 Traffic vs Delivery Time")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.boxplot(x=df["Traffic"], y=df["Delivery_Time"], ax=ax)
     st.pyplot(fig)
