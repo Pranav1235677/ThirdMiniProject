@@ -8,15 +8,16 @@ import mlflow.sklearn
 import streamlit as st
 import pickle
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler, LabelEncoder
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.metrics import r2_score
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# ✅ Streamlit Page Config
+# ✅ Set Streamlit page config FIRST
 st.set_page_config(layout="wide")
 
 # --- Load dataset ---
-df = pd.read_csv("AmazonDT_Dataset.csv").drop_duplicates()
+df = pd.read_csv("AmazonDT_Dataset.csv")
+df.drop_duplicates(inplace=True)
 
 # Handle missing values
 df.fillna(df.median(numeric_only=True), inplace=True)
@@ -32,7 +33,7 @@ df["Order_Day"] = df["Order_Date"].dt.day
 df["Order_Time"] = pd.to_datetime(df["Order_Time"], format="%H:%M:%S").dt.hour
 df["Pickup_Time"] = pd.to_datetime(df["Pickup_Time"], format="%H:%M:%S").dt.hour
 
-# ✅ Ensure Distance is correctly calculated
+# Calculate geospatial distance
 def calculate_distance(row):
     coords_1 = (row["Store_Latitude"], row["Store_Longitude"])
     coords_2 = (row["Drop_Latitude"], row["Drop_Longitude"])
@@ -56,8 +57,8 @@ y = df["Delivery_Time"]
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# ✅ Use MinMaxScaler to ensure distance impact
-scaler = MinMaxScaler()
+# Standardization
+scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
@@ -65,20 +66,38 @@ X_test = scaler.transform(X_test)
 with open("scaler.pkl", "wb") as f:
     pickle.dump(scaler, f)
 
-# ✅ Load or train the model
-try:
-    with open("best_model.pkl", "rb") as f:
-        best_model = pickle.load(f)
-    with open("scaler.pkl", "rb") as f:
-        scaler = pickle.load(f)
-except FileNotFoundError:
-    best_model = RandomForestRegressor(n_estimators=100, random_state=42)
-    best_model.fit(X_train, y_train)
+# --- Model Training ---
+@st.cache_resource
+def train_model():
+    model = RandomForestRegressor(n_estimators=200, random_state=42, max_depth=15, min_samples_split=5)
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    # Calculate metrics
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    r2 = r2_score(y_test, y_pred)
+
+    # Log metrics to MLflow
+    mlflow.set_experiment("Amazon_Delivery_Prediction")
+    with mlflow.start_run():
+        mlflow.log_metric("MAE", mae)
+        mlflow.log_metric("RMSE", rmse)
+        mlflow.log_metric("R2", r2)
+        mlflow.sklearn.log_model(model, "RandomForest_Model", input_example=X_test[:1])
+
+    # Save the model
     with open("best_model.pkl", "wb") as f:
-        pickle.dump(best_model, f)
+        pickle.dump(model, f)
 
-# --- Streamlit UI ---
+    return model, scaler
 
+best_model, scaler = train_model()
+
+# --- Streamlit App UI ---
+
+# Sidebar Inputs
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", use_container_width=True)
 st.sidebar.markdown("<h2 style='text-align: center;'>User Input Features</h2>", unsafe_allow_html=True)
 
@@ -107,14 +126,14 @@ encoded_category = label_encoders["Category"].transform([category])[0]
 features = [agent_age, agent_rating, order_year, order_month, order_day, order_hour, pickup_hour, distance, 
             encoded_weather, encoded_traffic, encoded_vehicle, encoded_area, encoded_category, 0, 0, 0, 0]
 
-# --- Instant Prediction ---
+# --- Prediction ---
 def predict(features):
     features_scaled = scaler.transform([features])
     return best_model.predict(features_scaled)[0]
 
-# ✅ Top-right predict button
-col1, col2 = st.columns([3, 1])
-with col2:
+# Prediction Button (📌 Moved to left near sidebar)
+col1, col2 = st.columns([1, 4])
+with col1:
     if st.button("🚀 Predict Delivery Time"):
         prediction = predict(features)
         st.success(f"📌 Estimated Delivery Time: {round(prediction, 2)} minutes")
