@@ -132,69 +132,49 @@ st.set_page_config(layout="wide")
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", use_container_width=True)
 st.sidebar.markdown("<h2 style='text-align: center;'>User Input Features</h2>", unsafe_allow_html=True)
 
-# User inputs
-agent_age = st.sidebar.number_input("Agent Age", min_value=18, max_value=70, value=30)
-agent_rating = st.sidebar.slider("Agent Rating", 1.0, 5.0, 4.5)
-order_year = st.sidebar.selectbox("Order Year", sorted(df["Order_Year"].unique()))
-order_month = st.sidebar.selectbox("Order Month", sorted(df["Order_Month"].unique()))
-order_day = st.sidebar.selectbox("Order Day", sorted(df["Order_Day"].unique()))
-order_hour = st.sidebar.slider("Order Time (Hour)", 0, 23, 12)
-pickup_hour = st.sidebar.slider("Pickup Time (Hour)", 0, 23, 14)
-distance = st.sidebar.number_input("Distance (KM)", min_value=0.1, max_value=50.0, value=5.0)
+# Initialize session state for user inputs
+for key, default in {
+    "agent_age": 30, "agent_rating": 4.5, "order_year": sorted(df["Order_Year"].unique())[0],
+    "order_month": sorted(df["Order_Month"].unique())[0], "order_day": sorted(df["Order_Day"].unique())[0],
+    "order_hour": 12, "pickup_hour": 14, "distance": 5.0, "weather": label_encoders["Weather"].classes_[0],
+    "traffic": label_encoders["Traffic"].classes_[0], "vehicle": label_encoders["Vehicle"].classes_[0],
+    "area": label_encoders["Area"].classes_[0], "category": label_encoders["Category"].classes_[0]
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
-weather = st.sidebar.selectbox("Weather", label_encoders["Weather"].classes_)
-traffic = st.sidebar.selectbox("Traffic", label_encoders["Traffic"].classes_)
-vehicle = st.sidebar.selectbox("Vehicle", label_encoders["Vehicle"].classes_)
-area = st.sidebar.selectbox("Area", label_encoders["Area"].classes_)
-category = st.sidebar.selectbox("Category", label_encoders["Category"].classes_)
+# Sidebar inputs with session state
+st.sidebar.number_input("Agent Age", min_value=18, max_value=70, key="agent_age")
+st.sidebar.slider("Agent Rating", 1.0, 5.0, key="agent_rating")
+st.sidebar.selectbox("Order Year", sorted(df["Order_Year"].unique()), key="order_year")
+st.sidebar.selectbox("Order Month", sorted(df["Order_Month"].unique()), key="order_month")
+st.sidebar.selectbox("Order Day", sorted(df["Order_Day"].unique()), key="order_day")
+st.sidebar.slider("Order Time (Hour)", 0, 23, key="order_hour")
+st.sidebar.slider("Pickup Time (Hour)", 0, 23, key="pickup_hour")
+st.sidebar.number_input("Distance (KM)", min_value=0.1, max_value=50.0, key="distance")
+
+st.sidebar.selectbox("Weather", label_encoders["Weather"].classes_, key="weather")
+st.sidebar.selectbox("Traffic", label_encoders["Traffic"].classes_, key="traffic")
+st.sidebar.selectbox("Vehicle", label_encoders["Vehicle"].classes_, key="vehicle")
+st.sidebar.selectbox("Area", label_encoders["Area"].classes_, key="area")
+st.sidebar.selectbox("Category", label_encoders["Category"].classes_, key="category")
 
 # Encode user inputs
-encoded_weather = label_encoders["Weather"].transform([weather])[0]
-encoded_traffic = label_encoders["Traffic"].transform([traffic])[0]
-encoded_vehicle = label_encoders["Vehicle"].transform([vehicle])[0]
-encoded_area = label_encoders["Area"].transform([area])[0]
-encoded_category = label_encoders["Category"].transform([category])[0]
+encoded_weather = label_encoders["Weather"].transform([st.session_state.weather])[0]
+encoded_traffic = label_encoders["Traffic"].transform([st.session_state.traffic])[0]
+encoded_vehicle = label_encoders["Vehicle"].transform([st.session_state.vehicle])[0]
+encoded_area = label_encoders["Area"].transform([st.session_state.area])[0]
+encoded_category = label_encoders["Category"].transform([st.session_state.category])[0]
 
 # Prepare input features
-features = [agent_age, agent_rating, order_year, order_month, order_day, order_hour, pickup_hour, distance, 
-            encoded_weather, encoded_traffic, encoded_vehicle, encoded_area, encoded_category, 0, 0, 0, 0]
+features = [
+    st.session_state.agent_age, st.session_state.agent_rating, st.session_state.order_year,
+    st.session_state.order_month, st.session_state.order_day, st.session_state.order_hour,
+    st.session_state.pickup_hour, st.session_state.distance, encoded_weather, encoded_traffic,
+    encoded_vehicle, encoded_area, encoded_category, 0, 0, 0, 0
+]
 
 # Predict
 if st.button("🚀 Predict Delivery Time"):
     prediction = predict_delivery_time(features)
     st.success(f"📌 Estimated Delivery Time: {round(prediction, 2)} minutes")
-
-# --- EDA Section ---
-st.header("📊 Exploratory Data Analysis")
-
-# Arrange EDA into sections
-eda_tabs = st.tabs(["Missing Values", "Feature Distributions", "Outliers", "Correlation Heatmap", "Delivery Time vs Distance"])
-
-with eda_tabs[0]:  
-    st.write("### 🔍 Missing Values")
-    st.write(df.isnull().sum())
-
-with eda_tabs[1]:  
-    st.write("### 📊 Feature Distributions")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.histplot(df["Delivery_Time"], bins=30, kde=True, ax=ax)
-    st.pyplot(fig)
-
-with eda_tabs[2]:  
-    st.write("### ⚠️ Outliers in Delivery Time")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.boxplot(x=df["Delivery_Time"], ax=ax)
-    st.pyplot(fig)
-
-with eda_tabs[3]:  
-    st.write("### 🔥 Correlation Heatmap")
-    df_numeric = df.select_dtypes(include=[np.number])
-    fig, ax = plt.subplots(figsize=(10,6))
-    sns.heatmap(df_numeric.corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
-    st.pyplot(fig)
-
-with eda_tabs[4]:  
-    st.write("### 🚗 Delivery Time vs Distance")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.scatterplot(x=df["Distance_KM"], y=df["Delivery_Time"], alpha=0.5, ax=ax)
-    st.pyplot(fig)
