@@ -8,17 +8,15 @@ import mlflow.sklearn
 import streamlit as st
 import pickle
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import r2_score
 
-# ✅ Set Streamlit page config FIRST
+# ✅ Streamlit Page Config
 st.set_page_config(layout="wide")
 
 # --- Load dataset ---
-df = pd.read_csv("AmazonDT_Dataset.csv")
-df.drop_duplicates(inplace=True)
+df = pd.read_csv("AmazonDT_Dataset.csv").drop_duplicates()
 
 # Handle missing values
 df.fillna(df.median(numeric_only=True), inplace=True)
@@ -34,7 +32,7 @@ df["Order_Day"] = df["Order_Date"].dt.day
 df["Order_Time"] = pd.to_datetime(df["Order_Time"], format="%H:%M:%S").dt.hour
 df["Pickup_Time"] = pd.to_datetime(df["Pickup_Time"], format="%H:%M:%S").dt.hour
 
-# Calculate geospatial distance
+# ✅ Ensure Distance is correctly calculated
 def calculate_distance(row):
     coords_1 = (row["Store_Latitude"], row["Store_Longitude"])
     coords_2 = (row["Drop_Latitude"], row["Drop_Longitude"])
@@ -58,8 +56,8 @@ y = df["Delivery_Time"]
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Standardization
-scaler = StandardScaler()
+# ✅ Use MinMaxScaler to ensure distance impact
+scaler = MinMaxScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
@@ -67,52 +65,20 @@ X_test = scaler.transform(X_test)
 with open("scaler.pkl", "wb") as f:
     pickle.dump(scaler, f)
 
-# --- Model Training ---
-@st.cache_resource
-def train_and_save_models():
-    models = {
-        "Linear Regression": LinearRegression(),
-        "Random Forest": RandomForestRegressor(n_estimators=100, random_state=42),
-        "Gradient Boosting": GradientBoostingRegressor(n_estimators=100, random_state=42),
-    }
-
-    mlflow.set_experiment("Amazon_Delivery_Prediction")
-
-    best_model = None
-    best_r2 = -1
-
-    for model_name, model in models.items():
-        with mlflow.start_run(run_name=model_name):
-            model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
-
-            # Calculate metrics
-            mae = mean_absolute_error(y_test, y_pred)
-            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            r2 = r2_score(y_test, y_pred)
-
-            # Log metrics to MLflow
-            mlflow.log_metric("MAE", mae)
-            mlflow.log_metric("RMSE", rmse)
-            mlflow.log_metric("R2", r2)
-            mlflow.sklearn.log_model(model, model_name, input_example=X_test[:1])
-
-            # Select best model
-            if r2 > best_r2:
-                best_model = model
-                best_r2 = r2
-
-    # Save the best model
+# ✅ Load or train the model
+try:
+    with open("best_model.pkl", "rb") as f:
+        best_model = pickle.load(f)
+    with open("scaler.pkl", "rb") as f:
+        scaler = pickle.load(f)
+except FileNotFoundError:
+    best_model = RandomForestRegressor(n_estimators=100, random_state=42)
+    best_model.fit(X_train, y_train)
     with open("best_model.pkl", "wb") as f:
         pickle.dump(best_model, f)
 
-    return best_model, scaler
+# --- Streamlit UI ---
 
-best_model, scaler = train_and_save_models()
-
-# --- Streamlit App ---
-
-# Sidebar Inputs
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", use_container_width=True)
 st.sidebar.markdown("<h2 style='text-align: center;'>User Input Features</h2>", unsafe_allow_html=True)
 
@@ -146,10 +112,12 @@ def predict(features):
     features_scaled = scaler.transform([features])
     return best_model.predict(features_scaled)[0]
 
-# Prediction Button
-if st.sidebar.button("🚀 Predict Delivery Time"):
-    prediction = predict(features)
-    st.sidebar.success(f"📌 Estimated Delivery Time: {round(prediction, 2)} minutes")
+# ✅ Top-right predict button
+col1, col2 = st.columns([3, 1])
+with col2:
+    if st.button("🚀 Predict Delivery Time"):
+        prediction = predict(features)
+        st.success(f"📌 Estimated Delivery Time: {round(prediction, 2)} minutes")
 
 # --- EDA Section ---
 st.header("📊 Exploratory Data Analysis")
