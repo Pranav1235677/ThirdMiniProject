@@ -13,6 +13,9 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+# ✅ Set Streamlit page config FIRST
+st.set_page_config(layout="wide")
+
 # --- Load dataset ---
 df = pd.read_csv("AmazonDT_Dataset.csv")
 df.drop_duplicates(inplace=True)
@@ -108,7 +111,6 @@ def train_and_save_models():
 best_model, scaler = train_and_save_models()
 
 # --- Streamlit App ---
-st.set_page_config(layout="wide")
 
 # Sidebar Inputs
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", use_container_width=True)
